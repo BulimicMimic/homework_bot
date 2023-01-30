@@ -4,20 +4,16 @@ class HomeworkBotException(Exception):
 
 
 class UnavailableEndpointError(HomeworkBotException):
-    def __init__(self) -> None:
-        super().__init__('Эндпойнт недоступен.')
+    pass
 
 
 class RequestEndpointError(HomeworkBotException):
-    def __init__(self) -> None:
-        super().__init__('Сбой при запросе к эндпоинту.')
+    pass
 
 
 class InvalidResponseError(HomeworkBotException, TypeError):
-    def __init__(self) -> None:
-        super().__init__('Отсутствуют ожидаемые ключи в ответе API.')
+    pass
 
 
 class UnknownHomeworkStatusError(HomeworkBotException):
-    def __init__(self) -> None:
-        super().__init__('Невалидный статус домашней работы.')
+    pass

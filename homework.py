@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -30,13 +31,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-ENDPOINT_ERRORS = [
-    UnavailableEndpointError,
-    RequestEndpointError,
-    InvalidResponseError,
-    UnknownHomeworkStatusError,
-]
-
 logging.basicConfig(
     stream=sys.stdout,
     format='%(asctime)s, %(levelname)s, %(message)s'
@@ -45,47 +39,54 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def check_tokens():
+def check_tokens() -> bool:
     """Проверяет доступность переменных окружения."""
-    return PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID
+    return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
-def get_api_answer(timestamp):
+def get_api_answer(timestamp: int) -> dict:
     """Делает запрос к эндпоинту API-сервиса."""
+    payload = {'from_date': timestamp}
     try:
-        payload = {'from_date': timestamp}
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
-        if response.status_code != 200:
-            raise RequestEndpointError()
+        if response.status_code != HTTPStatus.OK:
+            raise RequestEndpointError('Неверный ответ от API.')
         return response.json()
     except requests.ConnectionError:
-        raise UnavailableEndpointError()
+        raise UnavailableEndpointError('API недоступен.')
     except requests.RequestException:
-        raise RequestEndpointError()
+        raise RequestEndpointError('Сбой при запросе к API.')
 
 
-def check_response(response):
+def check_response(response: dict) -> None:
     """Проверяет ответ API на соответствие документации."""
-    if not ('homeworks' in response and 'current_date' in response):
-        raise InvalidResponseError()
-    if not isinstance(response['homeworks'], list):
-        raise InvalidResponseError()
+    if not (
+            isinstance(response, dict)
+            and 'homeworks' in response and 'current_date' in response
+            and isinstance(response['homeworks'], list)
+    ):
+        raise InvalidResponseError('Отсутствуют ожидаемые ключи в ответе API.')
+
     if not response['homeworks']:
         logger.debug('В ответе нет новых статусов.')
 
 
-def parse_status(homework):
+def parse_status(homework: dict) -> str:
     """Извлекает из информации о домашней работе статус этой работы."""
-    if 'homework_name' not in homework:
-        raise InvalidResponseError()
-    if homework['status'] not in HOMEWORK_VERDICTS:
+    if not ('homework_name' in homework and 'status' in homework):
+        raise InvalidResponseError('Отсутствуют ожидаемые ключи в ответе API.')
+
+    status = homework['status']
+
+    if status not in HOMEWORK_VERDICTS:
         raise UnknownHomeworkStatusError()
+
     homework_name = homework['homework_name']
-    verdict = HOMEWORK_VERDICTS[homework['status']]
+    verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
-def send_message(bot, message):
+def send_message(bot: telegram.Bot, message: str) -> None:
     """Отправляет сообщение в Telegram чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
@@ -94,7 +95,7 @@ def send_message(bot, message):
         logger.error('Сбой при отправке сообщения в Telegram.')
 
 
-def main():
+def main() -> None:
     """Основная логика работы бота."""
     if not check_tokens():
         logger.critical('Отсутствуют обязательные переменные окружения!')
@@ -114,12 +115,9 @@ def main():
             timestamp = int(time.time())
         except HomeworkBotException as error:
             logger.error(error)
-            if error not in ENDPOINT_ERRORS:
-                send_message(bot, error)
-            else:
-                if not isinstance(error, type(last_api_error)):
-                    last_api_error = error
-                    send_message(bot, error)
+            if not isinstance(error, type(last_api_error)):
+                last_api_error = error
+                send_message(bot, str(error))
 
 
 if __name__ == '__main__':
