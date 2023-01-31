@@ -4,16 +4,16 @@ class HomeworkBotException(Exception):
 
 
 class UnavailableEndpointError(HomeworkBotException):
-    pass
+    """Ошибка недоступности API."""
 
 
 class RequestEndpointError(HomeworkBotException):
-    pass
+    """Ошибка запроса к API."""
 
 
 class InvalidResponseError(HomeworkBotException, TypeError):
-    pass
+    """Ошибка: некорректный ответ API."""
 
 
 class UnknownHomeworkStatusError(HomeworkBotException):
-    pass
+    """Ошибка: неожиданный статус домашней работы."""

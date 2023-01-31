@@ -47,15 +47,17 @@ def check_tokens() -> bool:
 def get_api_answer(timestamp: int) -> dict:
     """Делает запрос к эндпоинту API-сервиса."""
     payload = {'from_date': timestamp}
+
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
-        if response.status_code != HTTPStatus.OK:
-            raise RequestEndpointError('Неверный ответ от API.')
-        return response.json()
     except requests.ConnectionError:
         raise UnavailableEndpointError('API недоступен.')
     except requests.RequestException:
         raise RequestEndpointError('Сбой при запросе к API.')
+
+    if response.status_code != HTTPStatus.OK:
+        raise RequestEndpointError('Неверный ответ от API.')
+    return response.json()
 
 
 def check_response(response: dict) -> None:
@@ -73,13 +75,13 @@ def check_response(response: dict) -> None:
 
 def parse_status(homework: dict) -> str:
     """Извлекает из информации о домашней работе статус этой работы."""
-    if not ('homework_name' in homework and 'status' in homework):
+    if not {'homework_name', 'status'}.issubset(homework.keys()):
         raise InvalidResponseError('Отсутствуют ожидаемые ключи в ответе API.')
 
     status = homework['status']
 
     if status not in HOMEWORK_VERDICTS:
-        raise UnknownHomeworkStatusError()
+        raise UnknownHomeworkStatusError('Неожиданный статус домашней работы.')
 
     homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[status]
@@ -108,11 +110,11 @@ def main() -> None:
     while True:
         try:
             response = get_api_answer(timestamp)
+            timestamp = int(time.time())
             check_response(response)
             for homework in response['homeworks']:
                 send_message(bot, parse_status(homework))
             time.sleep(RETRY_PERIOD)
-            timestamp = int(time.time())
         except HomeworkBotException as error:
             logger.error(error)
             if not isinstance(error, type(last_api_error)):
